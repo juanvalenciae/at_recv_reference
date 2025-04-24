@@ -41,30 +41,44 @@ P2PServer::P2PServer()
 
 bool P2PServer::enable()
 {
+    bool is_ok;
     this->is_enabled = false;
 
-    DEBUG_SERIAL_PRINTF("Set Node device work mode      %s\r\n", api.lora.nwm.set() ? "Success" : "Fail");
-    DEBUG_SERIAL_PRINTF("Set P2P mode frequency         %s\r\n", api.lora.pfreq.set(900000000) ? "Success" : "Fail");
-    DEBUG_SERIAL_PRINTF("Set P2P mode spreading factor  %s\r\n", api.lora.psf.set(12) ? "Success" : "Fail");
-    DEBUG_SERIAL_PRINTF("Set P2P mode bandwidth         %s\r\n", api.lora.pbw.set(125) ? "Success" : "Fail");
-    DEBUG_SERIAL_PRINTF("Set P2P mode code rate         %s\r\n", api.lora.pcr.set(0) ? "Success" : "Fail");
-    DEBUG_SERIAL_PRINTF("Set P2P mode preamble length   %s\r\n", api.lora.ppl.set(100) ? "Success" : "Fail");
-    DEBUG_SERIAL_PRINTF("Set P2P mode tx power          %s\r\n", api.lora.ptp.set(22) ? "Success" : "Fail");
-    DEBUG_SERIAL_PRINTF("lora_recv_cb() load            %s\r\n",
-            api.lora.registerPRecvCallback(lora_recv_cb) ? "Success" : "Fail");
+    is_ok = api.lora.nwm.set()
+    DEBUG_SERIAL_PRINTF("Set Node device work mode      %s\r\n", (is_ok) ? "Success" : "Fail");
 
-    DEBUG_SERIAL_PRINTF(
-            "P2PServer Enable Success\r\n"
-            "frequency: %9dHz \tbandwidth: %dkHz\r\n"
-            "Spreading Factor: %d \tTx power: %d\r\n"
-            "Preamble Length: %d \tCode Rate: %d\r\n",
-            api.lora.pfreq.get(), api.lora.pbw.get(),
-            api.lora.psf.get(), api.lora.ptp.get(),
-            api.lora.ppl.get(), api.lora.pcr.get()
-            );
+    is_ok = api.lora.pfreq.set(900000000);
+    DEBUG_SERIAL_PRINTF("Set P2P mode frequency         %s\r\n", (is_ok) ? "Success" : "Fail");
+    is_ok = api.lora.psf.set(12);
+    DEBUG_SERIAL_PRINTF("Set P2P mode spreading factor  %s\r\n", (is_ok) ? "Success" : "Fail");
+    is_ok = api.lora.pbw.set(125);
+    DEBUG_SERIAL_PRINTF("Set P2P mode bandwidth         %s\r\n", (is_ok) ? "Success" : "Fail");
+    is_ok = api.lora.pcr.set(0);
+    DEBUG_SERIAL_PRINTF("Set P2P mode code rate         %s\r\n", (is_ok) ? "Success" : "Fail");
+    is_ok = api.lora.ppl.set(100);
+    DEBUG_SERIAL_PRINTF("Set P2P mode preamble length   %s\r\n", (is_ok) ? "Success" : "Fail");
+    is_ok = api.lora.ptp.set(22);
+    DEBUG_SERIAL_PRINTF("Set P2P mode tx power          %s\r\n", (is_ok) ? "Success" : "Fail");
+    is_ok = api.lora.registerPRecvCallback(lora_recv_cb);
+    DEBUG_SERIAL_PRINTF("lora_recv_cb() load            %s\r\n", (is_ok) ? "Success" : "Fail");
 
-    this->is_enabled = true;
-    return true;
+    if (is_ok == true) {
+        Serial.printf(
+                "==== P2PServer Enable Success =====\r\n"
+                "frequency: %9dHz \tbandwidth: %dkHz\r\n"
+                "Spreading Factor: %d \tTx power: %d\r\n"
+                "Preamble Length: %d \tCode Rate: %d\r\n"
+                "===================================\r\n",
+                api.lora.pfreq.get(), api.lora.pbw.get(),
+                api.lora.psf.get(), api.lora.ptp.get(),
+                api.lora.ppl.get(), api.lora.pcr.get()
+                );
+
+        this->is_enabled = true;
+        return true;
+    } else {
+        Serial.printf("setup() Error initializing LoRa Interface\r\n");
+    }
 }
 
 bool P2PServer::save()
@@ -105,7 +119,7 @@ bool P2PServer::listen(
 {
     bool is_ok;
     if (this->is_enabled == false) {
-        DEBUG_SERIAL_PRINTF("P2PServer is not enabled\r\n");
+        Serial.printf("P2PServer is not enabled\r\n");
         return false;
     }
 
@@ -121,7 +135,7 @@ bool P2PServer::listen(
         //if (millis() - now > 60 * 1000) {
         //    this->is_listening = false;
         //}
-        DEBUG_SERIAL_PRINTF("P2P Listen Mode\r\n");
+        Serial.printf("P2P Listen Mode\r\n");
         delay(10000);
     }
     api.lora.precv(0);
@@ -172,6 +186,7 @@ void P2PServer::handle_msg(p2p_msg_t req)
 
     if (is_ok == false) {
         DEBUG_SERIAL_PRINTF("P2P::handle_msg() Error: error with msg\r\n");
+        delay(4000);    // this prevents MCU stall
         return;
     }
 
