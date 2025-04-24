@@ -28,18 +28,35 @@ EdLoTiming edlo_timing = {
 
 void setup()
 {
+  bool is_ok;
   Serial.begin(115200);
-  api.lorawan.nwm.set();
-  api.lorawan.deui.get(lorawan_credentials.dev_eui, 8);
-  api.lorawan.appeui.get(lorawan_credentials.dev_eui, 8);
-  api.lorawan.appkey.get(lorawan_credentials.dev_eui, 16);
-  CfgServer.enable();
 
+  is_ok = api.lorawan.nwm.set();
+  DEBUG_SERIAL_PRINTF("LoRaWAN set %s\r\n", (is_ok == true)? "success" : "fail");
+
+  is_ok = api.lorawan.deui.get(lorawan_credentials.dev_eui, 8);
+  DEBUG_SERIAL_PRINTF("Load DEVEUI %s\r\n", (is_ok == true)? "success" : "fail");
+
+  is_ok = api.lorawan.appeui.get(lorawan_credentials.app_eui, 8);
+  DEBUG_SERIAL_PRINTF("Load APPEUI %s\r\n", (is_ok == true)? "success" : "fail");
+
+  is_ok = api.lorawan.appkey.get(lorawan_credentials.app_key, 16);
+  DEBUG_SERIAL_PRINTF("Load APPKEY %s\r\n", (is_ok == true)? "success" : "fail");
+
+  if (is_ok == true) {
+    DEBUG_SERIAL_PRINTF("DEVEUI: " DEVEUI_STR "\r\n", DEVEUI(lorawan_credentials.dev_eui));
+    DEBUG_SERIAL_PRINTF("APPEUI: " DEVEUI_STR "\r\n", DEVEUI(lorawan_credentials.app_eui));
+    DEBUG_SERIAL_PRINTF("APPKEY: " DEVEUI_STR ":" DEVEUI_STR "\r\n",
+                        APPKEY(lorawan_credentials.app_key));
+  }
+  CfgServer.enable();
 }
 
 void loop()
 {
-  DEBUG_SERIAL_PRINTF("DEVEUI: " DEVEUI_STR "\r\n", DEVEUI(lorawan_credentials.dev_eui));
+  //api.lorawan.appeui.get(lorawan_credentials.app_eui, 8);
+  //DEBUG_SERIAL_PRINTF("DEVEUI: " DEVEUI_STR "\r\n", DEVEUI(lorawan_credentials.dev_eui));
+  //DEBUG_SERIAL_PRINTF("APPEUI: " DEVEUI_STR "\r\n", DEVEUI(lorawan_credentials.app_eui));
   CfgServer.listen(&lorawan_credentials, &lorawan_params,  &edlo_timing, &edlo_datetime);
   delay(1000);
 }

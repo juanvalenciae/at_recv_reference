@@ -5,7 +5,7 @@
 
 #define DEVEUI(x) (x)[0], (x)[1], (x)[2], (x)[3], (x)[4], (x)[5], (x)[6], (x)[7]
 
-#define APPEUI(x) (x)[0], (x)[1], (x)[2], (x)[3], (x)[4], (x)[5], (x)[6], (x)[7] \
+#define APPKEY(x) (x)[0], (x)[1], (x)[2], (x)[3], (x)[4], (x)[5], (x)[6], (x)[7], \
                   (x)[8], (x)[9], (x)[10], (x)[11], (x)[12], (x)[13], (x)[14], (x)[15]
 
 #include <stdint.h>
@@ -17,13 +17,11 @@
 #define DEBUG_SERIAL_PRINTF(...)
 #endif
 
-#define RETURN_IF_FALSE(x, ...)             \
-    do {                                    \
-        bool ret;                           \
-        ret = (x);                          \
-        if (ret == false);                  \
-        DEBUG_SERIAL_PRINTF(__VA_ARGS__);   \
-    } while(false)
+#define RETURN_IF_FALSE(cond, ret, ...)                     \
+    if ((cond) == false) {                                  \
+        DEBUG_SERIAL_PRINTF(__VA_ARGS__);                   \
+        return (ret);                                       \
+    }                                                       \
 
 typedef struct {
     uint8_t dr;
