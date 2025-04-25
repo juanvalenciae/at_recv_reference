@@ -31,6 +31,10 @@ void lora_recv_cb(rui_lora_p2p_recv_t data)
 
     req.type = data.Buffer[16];
     req.length = data.Buffer[17];
+
+    for (int i=0; i < req.length && i < P2P_PAYLOAD_MAX_SIZE; i++) {
+        req.payload[i] = data.Buffer[i+18];
+    }
     CfgServer.handle_msg(req);
 }
 
@@ -44,7 +48,7 @@ bool P2PServer::enable()
     bool is_ok;
     this->is_enabled = false;
 
-    is_ok = api.lora.nwm.set()
+    is_ok = api.lora.nwm.set();
     DEBUG_SERIAL_PRINTF("Set Node device work mode      %s\r\n", (is_ok) ? "Success" : "Fail");
 
     is_ok = api.lora.pfreq.set(900000000);
@@ -157,6 +161,90 @@ bool P2PServer::pong(p2p_msg_t *resp, p2p_msg_t req)
     return true;
 }
 
+bool P2PServer::handle_get(p2p_msg_t *resp, p2p_msg_t req)
+{
+    if (memcpy(resp->dst_deui, req.src_deui, 8) == NULL) {
+        DEBUG_SERIAL_PRINTF("P2PServer::pong() Error: unable to set dst address");
+        return false;
+    }
+    if (memcpy(resp->src_deui, req.dst_deui, 8) == NULL) {
+        DEBUG_SERIAL_PRINTF("P2PServer::pong() Error: unable to set src address");
+        return false;
+    }
+    int ret;
+
+    char *payload = (char *)req.payload;
+    DEBUG_SERIAL_PRINTF("ascii payload: %s\r\n", (char *)req.payload);
+    if (req.length == 0 || payload[req.length] != '\0') {
+        resp->length = 0;
+        resp->type = (uint8_t)P2P_RESP_INVALID;
+        DEBUG_SERIAL_PRINTF("request payload length == 0 or non-null terminated string (%02X)\r\n",
+                payload[req.length]);
+        return true;
+    }
+
+    if (!strncmp(payload, "LORAWAN", P2P_PAYLOAD_MAX_SIZE)) {
+        ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
+                    "LORAWAN dr=%d adr=%d retries=%d rxdl1=%d rxdl2=%d",
+                    this->lorawan_parameters->dr,
+                    this->lorawan_parameters->adr_enabled,
+                    this->lorawan_parameters->retry,
+                    this->lorawan_parameters->rx1_delay,
+                    this->lorawan_parameters->rx2_delay);
+    } else if (!strncmp(payload, "LORACRED", P2P_PAYLOAD_MAX_SIZE)) {
+        ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
+                    "CREDENTIALS\r\n"
+                    "\tDEV_KEY=%02x%02x%02x%02x%02x%02x%02x%02x\r\n",
+                    "\tAPP_EUI=%02x%02x%02x%02x%02x%02x%02x%02x\r\n",
+                    "\tAPP_KEY=%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\r\n",
+                    DEVEUI(this->lorawan_credentials->dev_eui),
+                    DEVEUI(this->lorawan_credentials->app_eui),
+                    DEVEUI(this->lorawan_credentials->app_key));
+    } else if (!strncmp(payload, "DATETIME", P2P_PAYLOAD_MAX_SIZE)) {
+        ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
+                    "DATETIME (yOff-m-d HH:MM:SS)=%02d-%02d-%02d %02d:%02d:%02d",
+                    this->edlo_datetime_cfgs->yOff,
+                    this->edlo_datetime_cfgs->m,
+                    this->edlo_datetime_cfgs->d,
+                    this->edlo_datetime_cfgs->hh,
+                    this->edlo_datetime_cfgs->mm,
+                    this->edlo_datetime_cfgs->ss);
+    } else if (!strncmp(payload, "TIMING", P2P_PAYLOAD_MAX_SIZE)) {
+        ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
+                    "TIMING delta_max_period=%d period_to_send=%d\r\n"
+                    "\tLAST_SAVED (yOff-m-d HH:MM:SS) %02d-%02d-%02d %02d:%02d:%02d\r\n",
+                    this->edlo_timinig_cfgs->delta_max_period,
+                    this->edlo_timinig_cfgs->period_to_send,
+                    this->edlo_timinig_cfgs->LastDatetimeSaved.yOff,
+                    this->edlo_timinig_cfgs->LastDatetimeSaved.m,
+                    this->edlo_timinig_cfgs->LastDatetimeSaved.d,
+                    this->edlo_timinig_cfgs->LastDatetimeSaved.hh,
+                    this->edlo_timinig_cfgs->LastDatetimeSaved.mm,
+                    this->edlo_timinig_cfgs->LastDatetimeSaved.ss);
+    } else {
+        ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
+                    "'%s' Not implemented", payload);
+    }
+
+    
+
+    if (ret < 0) {
+        DEBUG_SERIAL_PRINTF("handle_msg() Error: snprintf returned %d", ret);
+        resp->type = (uint8_t)P2P_RESP_INVALID;
+        resp->length = 0;
+        return false;
+    } else if (ret + 1 > P2P_PAYLOAD_MAX_SIZE) {
+        DEBUG_SERIAL_PRINTF("handle_msg() Error: returned %d", ret);
+        resp->type = (uint8_t)P2P_RESP_SERVER_ERROR;
+        resp->length = 0;
+        return false;
+    } else {
+        resp->type = P2P_RESP_OK;
+        resp->length = ret+1;
+    }
+    return true;
+}
+
 void P2PServer::handle_msg(p2p_msg_t req)
 {
     if (memcmp(req.dst_deui, this->lorawan_credentials->dev_eui, 8)) {
@@ -179,6 +267,9 @@ void P2PServer::handle_msg(p2p_msg_t req)
     case P2P_REQ_PING:
         is_ok = this->pong(&resp, req);
         break;
+    case P2P_REQ_GET:
+        is_ok = this->handle_get(&resp, req);
+        break;
     default:
         is_ok = false;
         break;
@@ -192,13 +283,6 @@ void P2PServer::handle_msg(p2p_msg_t req)
 
     out_data = (uint8_t *)&resp;
     out_data_size = P2P_MSG_HEADER_SIZE + resp.length;
-    /*
-    is_ok = api.lora.precv(0);
-    if (is_ok == false) {
-        DEBUG_SERIAL_PRINTF("P2P::handle_msg() Error: lora.precv() call failed\r\n");
-        return;
-    }
-    */
 
     is_ok = api.lora.psend(out_data_size, out_data);
     if (is_ok == false) {

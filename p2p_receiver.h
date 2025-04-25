@@ -18,6 +18,7 @@ typedef enum {
     P2P_RESP_TIMEOUT,
     P2P_RESP_INVALID,
     P2P_RESP_NOT_ALLOWED,
+    P2P_RESP_SERVER_ERROR,
 
     P2P_MSG_MAX = 255
 } p2p_msg_type_e;
@@ -85,11 +86,17 @@ class P2PServer {
         bool is_listening = false;
         bool is_enabled = false;
 
-        /** Response a ping request
+        /** Responds a ping request
          * @param[out] resp response message
          * @param[in] req request message
          */
         bool pong(p2p_msg_t *resp, p2p_msg_t req);
+
+        /** Responds a get request
+         * @param[out] resp response message
+         * @param[in] req request message
+         */
+        bool handle_get(p2p_msg_t *resp, p2p_msg_t req);
 
         /** Configuration Structures
          * For structures which can be modified there is a pointer for the
