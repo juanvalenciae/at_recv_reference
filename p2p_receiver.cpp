@@ -53,13 +53,13 @@ bool P2PServer::enable()
 
     is_ok = api.lora.pfreq.set(900000000);
     DEBUG_SERIAL_PRINTF("Set P2P mode frequency         %s\r\n", (is_ok) ? "Success" : "Fail");
-    is_ok = api.lora.psf.set(12);
+    is_ok = api.lora.psf.set(8);
     DEBUG_SERIAL_PRINTF("Set P2P mode spreading factor  %s\r\n", (is_ok) ? "Success" : "Fail");
     is_ok = api.lora.pbw.set(125);
     DEBUG_SERIAL_PRINTF("Set P2P mode bandwidth         %s\r\n", (is_ok) ? "Success" : "Fail");
     is_ok = api.lora.pcr.set(0);
     DEBUG_SERIAL_PRINTF("Set P2P mode code rate         %s\r\n", (is_ok) ? "Success" : "Fail");
-    is_ok = api.lora.ppl.set(100);
+    is_ok = api.lora.ppl.set(200);
     DEBUG_SERIAL_PRINTF("Set P2P mode preamble length   %s\r\n", (is_ok) ? "Success" : "Fail");
     is_ok = api.lora.ptp.set(22);
     DEBUG_SERIAL_PRINTF("Set P2P mode tx power          %s\r\n", (is_ok) ? "Success" : "Fail");
@@ -173,25 +173,25 @@ bool P2PServer::handle_get(p2p_msg_t *resp, p2p_msg_t req)
     }
     int ret;
 
-    char *payload = (char *)req.payload;
     DEBUG_SERIAL_PRINTF("ascii payload: %s\r\n", (char *)req.payload);
-    if (req.length == 0 || payload[req.length] != '\0') {
+    if (req.length == 0 || req.payload[req.length-1] != '\0') {
+        DEBUG_SERIAL_PRINTF("request payload length == 0 or non-null terminated payload[%d]: %02X\r\n",
+                req.length, req.payload[req.length-1]);
         resp->length = 0;
         resp->type = (uint8_t)P2P_RESP_INVALID;
-        DEBUG_SERIAL_PRINTF("request payload length == 0 or non-null terminated string (%02X)\r\n",
-                payload[req.length]);
         return true;
     }
 
-    if (!strncmp(payload, "LORAWAN", P2P_PAYLOAD_MAX_SIZE)) {
+    if (!strncmp((char *)req.payload, "LORAWAN", P2P_PAYLOAD_MAX_SIZE)) {
         ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
-                    "LORAWAN dr=%d adr=%d retries=%d rxdl1=%d rxdl2=%d",
+                    "LORAWAN dr=%d adr=%d mask=%02x retries=%d rxdl1=%d rxdl2=%d",
                     this->lorawan_parameters->dr,
                     this->lorawan_parameters->adr_enabled,
+                    this->lorawan_parameters->sub_band_mask,
                     this->lorawan_parameters->retry,
                     this->lorawan_parameters->rx1_delay,
                     this->lorawan_parameters->rx2_delay);
-    } else if (!strncmp(payload, "LORACRED", P2P_PAYLOAD_MAX_SIZE)) {
+    } else if (!strncmp((char *)req.payload, "LORACRED", P2P_PAYLOAD_MAX_SIZE)) {
         ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
                     "CREDENTIALS\r\n"
                     "\tDEV_KEY=%02x%02x%02x%02x%02x%02x%02x%02x\r\n",
@@ -200,19 +200,21 @@ bool P2PServer::handle_get(p2p_msg_t *resp, p2p_msg_t req)
                     DEVEUI(this->lorawan_credentials->dev_eui),
                     DEVEUI(this->lorawan_credentials->app_eui),
                     DEVEUI(this->lorawan_credentials->app_key));
-    } else if (!strncmp(payload, "DATETIME", P2P_PAYLOAD_MAX_SIZE)) {
+    } else if (!strncmp((char *)req.payload, "EDLO_DATETIME", P2P_PAYLOAD_MAX_SIZE)) {
         ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
-                    "DATETIME (yOff-m-d HH:MM:SS)=%02d-%02d-%02d %02d:%02d:%02d",
+                    "EDLO_DATETIME(yOff-m-d HH:MM:SS) %02d-%02d-%02d %02d:%02d:%02d",
                     this->edlo_datetime_cfgs->yOff,
                     this->edlo_datetime_cfgs->m,
                     this->edlo_datetime_cfgs->d,
                     this->edlo_datetime_cfgs->hh,
                     this->edlo_datetime_cfgs->mm,
                     this->edlo_datetime_cfgs->ss);
-    } else if (!strncmp(payload, "TIMING", P2P_PAYLOAD_MAX_SIZE)) {
+    } else if (!strncmp((char *)req.payload, "EDLO_TIMING", P2P_PAYLOAD_MAX_SIZE)) {
         ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
-                    "TIMING delta_max_period=%d period_to_send=%d\r\n"
-                    "\tLAST_SAVED (yOff-m-d HH:MM:SS) %02d-%02d-%02d %02d:%02d:%02d\r\n",
+                    "EDLO_TIMING\r\n"
+                    "\tdelta_max_period=%d\r\n"
+                    "\tperiod_to_send=%d\r\n"
+                    "\tlast_datetime_saved(yOff-m-d HH:MM:SS) %02d-%02d-%02d %02d:%02d:%02d\r\n",
                     this->edlo_timinig_cfgs->delta_max_period,
                     this->edlo_timinig_cfgs->period_to_send,
                     this->edlo_timinig_cfgs->LastDatetimeSaved.yOff,
@@ -223,18 +225,19 @@ bool P2PServer::handle_get(p2p_msg_t *resp, p2p_msg_t req)
                     this->edlo_timinig_cfgs->LastDatetimeSaved.ss);
     } else {
         ret = snprintf((char *)resp->payload, P2P_PAYLOAD_MAX_SIZE,
-                    "'%s' Not implemented", payload);
+                    "'%s' Not implemented", (char *)req.payload);
     }
 
     
 
     if (ret < 0) {
-        DEBUG_SERIAL_PRINTF("handle_msg() Error: snprintf returned %d", ret);
+        DEBUG_SERIAL_PRINTF("handle_get() Error: snprintf returned %d\r\n", ret);
         resp->type = (uint8_t)P2P_RESP_INVALID;
         resp->length = 0;
         return false;
     } else if (ret + 1 > P2P_PAYLOAD_MAX_SIZE) {
-        DEBUG_SERIAL_PRINTF("handle_msg() Error: returned %d", ret);
+        DEBUG_SERIAL_PRINTF("handle_get() Error: response payload length %d > %d\r\n",
+                            ret, P2P_PAYLOAD_MAX_SIZE);
         resp->type = (uint8_t)P2P_RESP_SERVER_ERROR;
         resp->length = 0;
         return false;
